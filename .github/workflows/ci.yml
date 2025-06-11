@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Setup Python & Lean
+      - name: Setup Python & Lean CLI
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
@@ -42,14 +42,15 @@ jobs:
         run: pip install lean
 
       - name: Login to QuantConnect
-        run: lean login --user-id $QC_USER_ID --api-token $QC_API_TOKEN
-        shell: bash
-
-      - name: Run cloud backtest and notify Telegram
         shell: bash
         run: |
-          echo "🔄 Starting cloud backtest..."
-          # Запускаем бэктест и сохраняем весь вывод
+          lean login --user-id $QC_USER_ID --api-token $QC_API_TOKEN
+
+      - name: Run cloud backtest and send Telegram notification
+        shell: bash
+        run: |
+          echo "🔄 Запуск облачного бэктеста..."
+          # Запускаем бэктест и показываем вывод в лог
           OUTPUT=$(lean cloud backtest --push --name "CI Backtest" "./QC-Auto")
           echo "$OUTPUT"
 
@@ -57,7 +58,7 @@ jobs:
           URL=$(echo "$OUTPUT" | grep -Eo 'https://www\.quantconnect\.com/project/[0-9]+/[0-9a-f]+')
           echo "🔗 Backtest URL: $URL"
 
-          # Шлём уведомление в Telegram
+          # Отправляем в Telegram
           curl -X POST "$TELEGRAM_WEBHOOK" \
             -H 'Content-Type: application/json' \
             -d "{\"text\": \"✅ Backtest завершён. Ссылка: $URL\"}"
