@@ -1,0 +1,57 @@
+name: CI/CD Inline for QC-Auto
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-and-format:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install tools
+        run: |
+          python -m pip install --upgrade pip setuptools
+          pip install black flake8 lean
+      - name: Format code
+        run: black QC-Auto/main.py
+      - name: Lint code
+        run: flake8 QC-Auto/main.py
+
+  cloud-backtest:
+    needs: lint-and-format
+    runs-on: ubuntu-latest
+    env:
+      QC_USER_ID: ${{ secrets.QC_USER_ID }}
+      QC_API_TOKEN: ${{ secrets.QC_API_TOKEN }}
+      TELEGRAM_WEBHOOK: ${{ secrets.TELEGRAM_WEBHOOK }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Python & Lean CLI
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install Lean CLI
+        run: pip install lean
+
+      - name: Login to QuantConnect
+        shell: bash
+        run: lean login --user-id $QC_USER_ID --api-token $QC_API_TOKEN
+
+      - name: Backtest & Notify Telegram
+        shell: bash
+        run: |
+          echo "🔄 Starting cloud backtest..."
+          OUTPUT=$(lean cloud backtest --push --name "CI Backtest" "./QC-Auto")
+          echo "$OUTPUT"
+          URL=$(echo "$OUTPUT" | grep -Eo 'https://www\.quantconnect\.com/project/[0-9]+/[0-9a-f]+')
+          echo "🔗 Backtest URL: $URL"
+          curl -X POST "$TELEGRAM_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"text\": \"✅ Backtest завершён. Ссылка: $URL\"}"
