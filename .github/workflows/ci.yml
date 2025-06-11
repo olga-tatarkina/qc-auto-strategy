@@ -37,12 +37,12 @@ jobs:
       - run: lean login --user-id $QC_USER_ID --api-token $QC_API_TOKEN
         shell: bash
       - id: backtest
+        shell: bash
         run: |
           OUTPUT=$(lean cloud backtest --push --name "CI Backtest" "./QC-Auto")
           echo "$OUTPUT"
           URL=$(echo "$OUTPUT" | grep -Eo 'https://www\.quantconnect\.com/project/[0-9]+/[0-9a-f]+')
-          echo "url=$URL" >> $GITHUB_OUTPUT
-        shell: bash
+          echo "::set-output name=url::$URL"
       - run: |
           curl -X POST "$TELEGRAM_WEBHOOK" \
             -H 'Content-Type: application/json' \
