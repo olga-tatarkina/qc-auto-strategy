@@ -26,7 +26,7 @@ PARAMS = {
         "ORCL","CSCO","INTC","QCOM","TXN","ADP","CRM","NOW","TMO","ABT",
         "ABBV","PFE","MRK","UNH","XOM","CVX","SLB","LIN","UPS","UNP"
     ],
-    "START": "2022-01-01",
+    "START": "2023-01-01",
     "END":   None,       # None => until today
     "INTERVAL": "1d",    # '1d' recommended for this MVP
 
@@ -118,6 +118,7 @@ def _normalize_ohlcv_columns(df: pd.DataFrame) -> pd.DataFrame:
 def download_history(ticker: str, start: str, end: Optional[str], interval: str) -> pd.DataFrame:
     df = yf.download(ticker, start=start, end=end, interval=interval, auto_adjust=False, progress=False, group_by="column")
     if df.empty:
+        print(f"  Warning: No data rows downloaded for {ticker} (start={start}, end={end}, interval={interval}).")
         return df
     df = _normalize_ohlcv_columns(df)
     df.index = pd.to_datetime(df.index)
@@ -240,6 +241,7 @@ def prepare_ticker(ticker: str, P: Dict) -> Tuple[pd.DataFrame, List[Level]]:
     # if any core columns missing, skip
     required_cols = ["Open", "High", "Low", "Close", "Volume"]
     if any(c not in df.columns for c in required_cols):
+        print(f"  Warning: Missing OHLCV columns for {ticker}. Available: {list(df.columns)}")
         return pd.DataFrame(), []
     df = compute_atr(df, P["ATR_PERIOD"])
     df["ATRpct"] = df[f"ATR_{P['ATR_PERIOD']}"] / df["Close"]
@@ -541,6 +543,15 @@ def main() -> None:
 
     print("\n=== Report ===")
     print(rep_df.to_string(index=False))
+
+    # Short textual trade summary
+    if not trades_df.empty:
+        print("\n=== Trade Summary ===")
+        try:
+            by_setup = trades_df.groupby("setup")["pnl_eur"].agg(["count","mean","sum"]).reset_index()
+            print(by_setup.to_string(index=False, header=["setup","trades","avg_pnl","sum_pnl"]))
+        except Exception as e:
+            print(f"(Could not compute summary: {e})")
 
     # --- Save outputs ---
     u_path = os.path.join(PARAMS["OUT_DIR"], "universe_summary.csv")
