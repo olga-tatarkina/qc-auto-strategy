@@ -18,7 +18,14 @@ pd.options.display.float_format = lambda x: f"{x:,.4f}"
 # --- Parameters ---
 PARAMS = {
     # Universe & dates
-    "TICKERS": ["AAPL", "MSFT", "NVDA", "META", "AMZN", "TSLA", "AMD", "GOOGL", "NFLX", "AVGO"],
+    "TICKERS": [
+        "AAPL","MSFT","NVDA","META","AMZN","TSLA","AMD","GOOGL","NFLX","AVGO",
+        "JPM","BAC","WFC","C","MS","GS","V","MA","PYPL","AXP",
+        "KO","PEP","PG","MCD","SBUX","TGT","WMT","COST","NKE","DIS",
+        "HD","LOW","BA","LMT","CAT","DE","HON","GE","MMM","IBM",
+        "ORCL","CSCO","INTC","QCOM","TXN","ADP","CRM","NOW","TMO","ABT",
+        "ABBV","PFE","MRK","UNH","XOM","CVX","SLB","LIN","UPS","UNP"
+    ],
     "START": "2022-01-01",
     "END":   None,       # None => until today
     "INTERVAL": "1d",    # '1d' recommended for this MVP
@@ -26,21 +33,21 @@ PARAMS = {
     # Liquidity & volatility filters (daily)
     "MIN_PRICE": 5.0,
     "MIN_AVG_VOL20": 1_000_000,   # shares/day
-    "ATR_PCT_MIN": 0.01,          # 1%
-    "ATR_PCT_MAX": 0.08,          # 8%
+    "ATR_PCT_MIN": 0.005,         # 0.5%
+    "ATR_PCT_MAX": 0.15,          # 15%
 
     # ATR & consolidation
     "ATR_PERIOD": 14,
     "CONSOL_5D_MAX_MULT_ATR": 1.5,
 
     # Swing/levels detection
-    "SWING_WINDOW": 3,          # N bars left/right to define swing
+    "SWING_WINDOW": 2,          # N bars left/right to define swing
     "LEVEL_TOL_ATR": 0.25,      # points counted as same level if within 0.25*ATR
-    "MIN_TOUCHES": 2,           # min touches to consider level "strong"
-    "MAX_LEVELS_PER_SIDE": 5,   # per ticker: top N supports + top N resistances by touches
+    "MIN_TOUCHES": 1,           # min touches to consider level "strong"
+    "MAX_LEVELS_PER_SIDE": 10,  # per ticker: top N supports + top N resistances by touches
 
     # Signal proximity (distance to level)
-    "READY_DIST_ATR": 0.5,      # entry only if distance < 0.5*ATR
+    "READY_DIST_ATR": 1.0,      # entry only if distance < 1.0*ATR
 
     # Risk & exits
     "RISK_EUR": 10.0,           # fixed risk per trade (EUR)
@@ -257,7 +264,7 @@ def prepare_ticker(ticker: str, P: Dict) -> Tuple[pd.DataFrame, List[Level]]:
 
 # --- Generate signals per ticker/day ---
 
-def generate_signals(df: pd.DataFrame, levels: List[Level], P: Dict) -> List[Signal]:
+def generate_signals(df: pd.DataFrame, levels: List[Level], P: Dict, ignore_consolidation: bool = False) -> List[Signal]:
     if df.empty or not levels:
         return []
 
@@ -273,7 +280,7 @@ def generate_signals(df: pd.DataFrame, levels: List[Level], P: Dict) -> List[Sig
         price = row["Close"]
         range5 = row["Range5"]
         # consolidation near level
-        is_consol_ok = (range5 / atr) <= P["CONSOL_5D_MAX_MULT_ATR"]
+        is_consol_ok = True if ignore_consolidation else (range5 / atr) <= P["CONSOL_5D_MAX_MULT_ATR"]
 
         # Check proximity to each level
         for L in levels:
@@ -499,9 +506,12 @@ def main() -> None:
         })
 
         sigs = generate_signals(df, levels, PARAMS)
+        # If zero signals, retry ignoring consolidation filter
         if not sigs:
-            print(f"  No signals for {ticker}")
-            continue
+            sigs = generate_signals(df, levels, PARAMS, ignore_consolidation=True)
+            if not sigs:
+                print(f"  No signals for {ticker}")
+                continue
 
         tds = backtest(df, sigs, PARAMS)
         all_trades.extend(tds)
